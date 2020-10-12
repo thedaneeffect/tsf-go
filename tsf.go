@@ -6,6 +6,12 @@ package tsf
 //#include "tsf.h"
 import "C"
 
+// The lower this block size is the more accurate the effects are.
+// Increasing the value significantly lowers the CPU usage of the voice rendering.
+// If LFO affects the low-pass filter it can be hearable even as low as 8.
+// See tsf.h:240
+const SampleBlockSize = C.TSF_RENDER_EFFECTSAMPLEBLOCK
+
 // Supported output modes by the render methods
 type OutputMode int
 

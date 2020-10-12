@@ -58,7 +58,7 @@ func (f *SoundFont) GetPresetName(preset int) string {
 }
 
 // Returns the name of a preset by bank and preset number
-func (f *SoundFont) GetBankPresetName(bank, preset int) string {
+func (f *SoundFont) BankGetPresetName(bank, preset int) string {
 	return C.GoString(C.tsf_bank_get_presetname(f.tsf, C.int(bank), C.int(preset)))
 }
 
@@ -127,7 +127,7 @@ func (f *SoundFont) BankNoteOff(bank, preset, key int) int {
 }
 
 // Stop playing all notes (end with sustain and release)
-func (f *SoundFont) AllNotesOff() {
+func (f *SoundFont) NoteOffAll() {
 	C.tsf_note_off_all(f.tsf)
 }
 
@@ -150,4 +150,116 @@ func (f *SoundFont) RenderShort(dst []int16, samples, mix int) {
 // mix: if 0 clear the buffer first, otherwise mix into existing data
 func (f *SoundFont) RenderFloat(dst []float32, samples, mix int) {
 	C.tsf_render_float(f.tsf, (*C.float)(&dst[0]), C.int(samples), C.int(mix))
+}
+
+//
+// Higher level channel based functions, set up channel parameters
+//
+
+func (f *SoundFont) ChannelSetPresetIndex(channel, preset int) {
+	C.tsf_channel_set_presetindex(f.tsf, C.int(channel), C.int(preset))
+}
+
+// midiDrums: 0 for normal channels, otherwise apply MIDI drum channel rules
+// returns 0 if preset does not exist, otherwise 1
+func (f *SoundFont) ChannelSetPresetNumber(channel, preset, midiDrums int) int {
+	return int(C.tsf_channel_set_presetnumber(f.tsf, C.int(channel), C.int(preset), C.int(midiDrums)))
+}
+
+func (f *SoundFont) ChannelSetBank(channel, bank int) {
+	C.tsf_channel_set_bank(f.tsf, C.int(channel), C.int(bank))
+}
+
+// returns 0 if preset does not exist, otherwise 1
+func (f *SoundFont) ChannelSetBankPreset(channel, bank, preset int) int {
+	return int(C.tsf_channel_set_bank_preset(f.tsf, C.int(channel), C.int(bank), C.int(preset)))
+}
+
+// pan: stereo panning value from 0.0 (left) to 1.0 (right) (default 0.5 center)
+func (f *SoundFont) ChannelSetPan(channel int, pan float32) {
+	C.tsf_channel_set_pan(f.tsf, C.int(channel), C.float(pan))
+}
+
+// volume: linear volume scale factor (default 1.0 full)
+func (f *SoundFont) ChannelSetVolume(channel int, volume float32) {
+	C.tsf_channel_set_volume(f.tsf, C.int(channel), C.float(volume))
+}
+
+// pitch: pitch wheel position 0 to 16383 (default 8192 unpitched)
+func (f *SoundFont) ChannelSetPitchWheel(channel, pitch int) {
+	C.tsf_channel_set_pitchwheel(f.tsf, C.int(channel), C.int(pitch))
+}
+
+// pitch_range: range of the pitch wheel in semitones (default 2.0, total +/- 2 semitones)
+func (f *SoundFont) ChannelSetPitchRange(channel int, _range float32) {
+	C.tsf_channel_set_pitchrange(f.tsf, C.int(channel), C.float(_range))
+}
+
+// tuning: tuning of all playing voices in semitones (default 0.0, standard (A440) tuning)
+func (f *SoundFont) ChannelSetTuning(channel int, tuning float32) {
+	C.tsf_channel_set_tuning(f.tsf, C.int(channel), C.float(tuning))
+}
+
+// starts playing note
+// key: note value between 0 and 127 (60 being middle C)
+// vel: velocity as a float between 0.0 (equal to note off) and 1.0 (full)
+func (f *SoundFont) ChannelNoteOn(channel, key int, velocity float32) {
+	C.tsf_channel_note_on(f.tsf, C.int(channel), C.int(key), C.float(velocity))
+}
+
+// stops playing note
+// key: note value between 0 and 127 (60 being middle C)
+func (f *SoundFont) ChannelNoteOff(channel, key int) {
+	C.tsf_channel_note_off(f.tsf, C.int(channel), C.int(key))
+}
+
+// end with sustain and release
+func (f *SoundFont) ChannelNoteOffAll(channel int) {
+	C.tsf_channel_note_off_all(f.tsf, C.int(channel))
+}
+
+// end immediately
+func (f *SoundFont) ChannelSoundsOffAll(channel int) {
+	C.tsf_channel_sounds_off_all(f.tsf, C.int(channel))
+}
+
+// Apply a MIDI control change to the channel (not all controllers are supported!)
+func (f *SoundFont) ChannelMidiControl(channel, controller, value int) {
+	C.tsf_channel_midi_control(f.tsf, C.int(channel), C.int(controller), C.int(value))
+}
+
+//
+// boring getters
+//
+
+func (f *SoundFont) ChannelGetPresetIndex(channel int) int {
+	return int(C.tsf_channel_get_preset_index(f.tsf, C.int(channel)))
+}
+
+func (f *SoundFont) ChannelGetPresetBank(channel int) int {
+	return int(C.tsf_channel_get_preset_bank(f.tsf, C.int(channel)))
+}
+
+func (f *SoundFont) ChannelGetPresetNumber(channel int) int {
+	return int(C.tsf_channel_get_preset_number(f.tsf, C.int(channel)))
+}
+
+func (f *SoundFont) ChannelGetPan(channel int) float32 {
+	return float32(C.tsf_channel_get_pan(f.tsf, C.int(channel)))
+}
+
+func (f *SoundFont) ChannelGetVolume(channel int) float32 {
+	return float32(C.tsf_channel_get_volume(f.tsf, C.int(channel)))
+}
+
+func (f *SoundFont) ChannelGetPitchWheel(channel int) int {
+	return int(C.tsf_channel_get_pitchwheel(f.tsf, C.int(channel)))
+}
+
+func (f *SoundFont) ChannelGetPitchRange(channel int) float32 {
+	return float32(C.tsf_channel_get_pitchrange(f.tsf, C.int(channel)))
+}
+
+func (f *SoundFont) ChannelGetTuning(channel int) float32 {
+	return float32(C.tsf_channel_get_tuning(f.tsf, C.int(channel)))
 }

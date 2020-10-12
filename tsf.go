@@ -1,143 +1,153 @@
 package tsf
 
-/*
-#cgo LDFLAGS: -lm
-
-#define TSF_STATIC 1
-#define TSF_IMPLEMENTATION 1
-#include "tsf.h"
-
-*/
+//#cgo LDFLAGS: -lm
+//#define TSF_STATIC 1
+//#define TSF_IMPLEMENTATION 1
+//#include "tsf.h"
 import "C"
 
+// Supported output modes by the render methods
 type OutputMode int
 
 const (
-	ModeStereoInterleaved OutputMode = C.TSF_STEREO_INTERLEAVED
-	ModeStereoUnweaved    OutputMode = C.TSF_STEREO_UNWEAVED
-	ModeMono              OutputMode = C.TSF_MONO
+	// Two channels with single left/right samples one after another
+	StereoInterleaved OutputMode = C.TSF_STEREO_INTERLEAVED
+	// Two channels with all samples for the left channel first then right
+	StereoUnweaved OutputMode = C.TSF_STEREO_UNWEAVED
+	// A single channel (stereo instruments are mixed into center)
+	Mono OutputMode = C.TSF_MONO
 )
 
-type TSF struct {
-	tsf  *C.tsf
-	mono bool
+type SoundFont struct {
+	tsf *C.tsf
 }
 
-func New(font []byte) *TSF {
-	return &TSF{tsf: C.tsf_load_memory(C.CBytes(font), C.int(len(font)))}
+// Directly load a SoundFont from a .sf2 file path
+func LoadFilename(filename string) *SoundFont {
+	return &SoundFont{C.tsf_load_filename(C.CString(filename))}
 }
 
-func NewFile(font string) *TSF {
-	return &TSF{tsf: C.tsf_load_filename(C.CString(font))}
+// Load a SoundFont from a block of memory
+func LoadMemory(data []byte) *SoundFont {
+	return &SoundFont{C.tsf_load_memory(C.CBytes(data), C.int(len(data)))}
 }
 
-func (tsf *TSF) Close()       { C.tsf_close(tsf.tsf) }
-func (tsf *TSF) Reset()       { C.tsf_reset(tsf.tsf) }
-func (tsf *TSF) PresetCount() { C.tsf_get_presetcount(tsf.tsf) }
-func (tsf *TSF) PresetIndex(bank int, preset int) {
-	C.tsf_get_presetindex(tsf.tsf, C.int(bank), C.int(preset))
+// Free the memory related to this tsf instance
+func (f *SoundFont) Close() {
+	C.tsf_close(f.tsf)
 }
-func (tsf *TSF) PresetName(preset int) string {
-	return C.GoString(C.tsf_get_presetname(tsf.tsf, C.int(preset)))
+
+// Stop all playing notes immediatly and reset all channel parameters
+func (f *SoundFont) Reset() {
+	C.tsf_reset(f.tsf)
 }
-func (tsf *TSF) BankPresetName(bank, preset int) string {
-	return C.GoString(C.tsf_bank_get_presetname(tsf.tsf, C.int(bank), C.int(preset)))
+
+// Returns the preset index from a bank and preset number, or -1 if it does not exist in the loaded SoundFont
+func (f *SoundFont) GetPresetIndex(bank, preset int) int {
+	return int(C.tsf_get_presetindex(f.tsf, C.int(bank), C.int(preset)))
 }
-func (tsf *TSF) SetOutput(mode OutputMode, sr int, gain float32) {
-	tsf.mono = mode == ModeMono
-	C.tsf_set_output(tsf.tsf, C.enum_TSFOutputMode(mode), C.int(sr), C.float(gain))
+
+// Returns the number of presets in the loaded SoundFont
+func (f *SoundFont) GetPresetCount() int {
+	return int(C.tsf_get_presetcount(f.tsf))
 }
-func (tsf *TSF) NoteOn(preset, key int, vel float32) {
-	C.tsf_note_on(tsf.tsf, C.int(preset), C.int(key), C.float(vel))
+
+// Returns the name of a preset index >= 0 and < f.GetPresetCount()
+func (f *SoundFont) GetPresetName(preset int) string {
+	return C.GoString(C.tsf_get_presetname(f.tsf, C.int(preset)))
 }
-func (tsf *TSF) BankNoteOn(bank, preset, key int, vel float32) int {
-	return int(C.tsf_bank_note_on(tsf.tsf, C.int(bank), C.int(preset), C.int(key), C.float(vel)))
+
+// Returns the name of a preset by bank and preset number
+func (f *SoundFont) GetBankPresetName(bank, preset int) string {
+	return C.GoString(C.tsf_bank_get_presetname(f.tsf, C.int(bank), C.int(preset)))
 }
-func (tsf *TSF) NoteOff(preset, key int) {
-	C.tsf_note_off(tsf.tsf, C.int(preset), C.int(key))
+
+// Thread safety:
+// Your audio output which calls the tsf_render* functions will most likely
+// run on a different thread than where the playback tsf_note* functions
+// are called. In which case some sort of concurrency control like a
+// mutex needs to be used so they are not called at the same time.
+// Alternatively, you can pre-allocate a maximum number of voices that can
+// play simultaneously by calling tsf_set_max_voices after loading.
+// That way memory re-allocation will not happen during tsf_note_on and
+// TSF should become mostly thread safe.
+// There is a theoretical chance that ending notes would negatively influence
+// a voice that is rendering at the time but it is hard to say.
+// Also be aware, this has not been tested much.
+
+// Setup the parameters for the voice render methods
+// mode: if mono or stereo and how stereo channel data is ordered
+// sampleRate: the number of samples per second (output frequency)
+// gain: volume gain in decibels (>0 means higher, <0 means lower)
+func (f *SoundFont) SetOutput(mode OutputMode, sampleRate int, gain float32) {
+	C.tsf_set_output(f.tsf, uint32(mode), C.int(sampleRate), C.float(gain))
 }
-func (tsf *TSF) BankNoteOff(bank, preset, key int) int {
-	return int(C.tsf_bank_note_off(tsf.tsf, C.int(bank), C.int(preset), C.int(key)))
+
+// Set the global gain as a volume factor
+// volume: the desired volume where 1.0 is 100%
+func (f *SoundFont) SetVolume(volume float32) {
+	C.tsf_set_volume(f.tsf, C.float(volume))
 }
-func (tsf *TSF) NoteOffAll()           { C.tsf_note_off_all(tsf.tsf) }
-func (tsf *TSF) ActiveVoiceCount() int { return int(C.tsf_active_voice_count(tsf.tsf)) }
-func (tsf *TSF) RenderInt16(samples []int16) {
-	n := C.int(len(samples))
-	if !tsf.mono {
-		n = n / 2
-	}
-	C.tsf_render_short(tsf.tsf, (*C.short)(&samples[0]), n, 0)
+
+// Set the maximum number of voices to play simultaneously
+// Depending on the soundfond, one note can cause many new voices to be started,
+// so don't keep this number too low or otherwise sounds may not play.
+// max_voices: maximum number to pre-allocate and set the limit to
+func (f *SoundFont) SetMaxVoices(max int) {
+	C.tsf_set_max_voices(f.tsf, C.int(max))
 }
-func (tsf *TSF) RenderFloat32(samples []float32) {
-	n := C.int(len(samples))
-	if !tsf.mono {
-		n = n / 2
-	}
-	C.tsf_render_float(tsf.tsf, (*C.float)(&samples[0]), n, 0)
+
+// Start playing a note
+// preset: preset index >= 0 and < f.GetPresetCount()
+// key: note value between 0 and 127 (60 being middle C)
+// vel: velocity as a float between 0.0 (equal to note off) and 1.0 (full)
+func (f *SoundFont) NoteOn(preset, key int, velocity float32) {
+	C.tsf_note_on(f.tsf, C.int(preset), C.int(key), C.float(velocity))
 }
-func (tsf *TSF) SetChannelPresetIndex(channel, preset int) {
-	C.tsf_channel_set_presetindex(tsf.tsf, C.int(channel), C.int(preset))
+
+// Start playing a note
+// bank: instrument bank number (alternative to preset_index)
+// preset: preset index >= 0 and < f.GetPresetCount()
+// key: note value between 0 and 127 (60 being middle C)
+// vel: velocity as a float between 0.0 (equal to note off) and 1.0 (full)
+// returns 0 if preset does not exist, otherwise 1
+func (f *SoundFont) BankNoteOn(bank, preset, key int, velocity float32) int {
+	return int(C.tsf_bank_note_on(f.tsf, C.int(bank), C.int(preset), C.int(key), C.float(velocity)))
 }
-func (tsf *TSF) SetChannelPresetNumber(channel, preset int) int {
-	return int(C.tsf_channel_set_presetnumber(tsf.tsf, C.int(channel), C.int(preset), 0))
+
+// Stop playing a note
+func (f *SoundFont) NoteOff(preset, key int) {
+	C.tsf_note_off(f.tsf, C.int(preset), C.int(key))
 }
-func (tsf *TSF) SetChannelBank(channel, bank int) {
-	C.tsf_channel_set_bank(tsf.tsf, C.int(channel), C.int(bank))
+
+// Stop playing a note
+// returns 0 if preset does not exist, otherwise 1
+func (f *SoundFont) BankNoteOff(bank, preset, key int) int {
+	return int(C.tsf_bank_note_off(f.tsf, C.int(bank), C.int(preset), C.int(key)))
 }
-func (tsf *TSF) SetChannelBankPreset(channel, bank, preset int) int {
-	return int(C.tsf_channel_set_bank_preset(tsf.tsf, C.int(channel), C.int(bank), C.int(preset)))
+
+// Stop playing all notes (end with sustain and release)
+func (f *SoundFont) AllNotesOff() {
+	C.tsf_note_off_all(f.tsf)
 }
-func (tsf *TSF) SetChannelPan(channel int, pan float32) {
-	C.tsf_channel_set_pan(tsf.tsf, C.int(channel), C.float(pan))
+
+// Returns the number of active voices
+func (f *SoundFont) ActiveVoiceCount() int {
+	return int(C.tsf_active_voice_count(f.tsf))
 }
-func (tsf *TSF) SetChannelVolume(channel int, volume float32) {
-	C.tsf_channel_set_volume(tsf.tsf, C.int(channel), C.float(volume))
+
+// Render output samples into a buffer
+// dst: target buffer of size samples * output_channels * sizeof(type)
+// samples: number of samples to render
+// mix: if 0 clear the buffer first, otherwise mix into existing data
+func (f *SoundFont) RenderShort(dst []int16, samples, mix int) {
+	C.tsf_render_short(f.tsf, (*C.short)(&dst[0]), C.int(samples), C.int(mix))
 }
-func (tsf *TSF) SetChannelPitchWheel(channel, pitch_wheel int) {
-	C.tsf_channel_set_pitchwheel(tsf.tsf, C.int(channel), C.int(pitch_wheel))
-}
-func (tsf *TSF) SetChannelPitchRange(channel int, pitch_range int) {
-	C.tsf_channel_set_pitchrange(tsf.tsf, C.int(channel), C.float(pitch_range))
-}
-func (tsf *TSF) SetChannelTuning(channel int, tuning float32) {
-	C.tsf_channel_set_tuning(tsf.tsf, C.int(channel), C.float(tuning))
-}
-func (tsf *TSF) ChannelNoteOn(channel, key int, vel float32) {
-	C.tsf_channel_note_on(tsf.tsf, C.int(channel), C.int(key), C.float(vel))
-}
-func (tsf *TSF) ChannelNoteOff(channel, key int) {
-	C.tsf_channel_note_off(tsf.tsf, C.int(channel), C.int(key))
-}
-func (tsf *TSF) ChannelNoteOffAll(channel int) {
-	C.tsf_channel_note_off_all(tsf.tsf, C.int(channel))
-}
-func (tsf *TSF) ChannelSoundsOffAll(channel int) {
-	C.tsf_channel_sounds_off_all(tsf.tsf, C.int(channel))
-}
-func (tsf *TSF) ChannelMIDIControl(channel, controller, control_value int) {
-	C.tsf_channel_midi_control(tsf.tsf, C.int(channel), C.int(controller), C.int(control_value))
-}
-func (tsf *TSF) ChannelPresetIndex(channel int) int {
-	return int(C.tsf_channel_get_preset_index(tsf.tsf, C.int(channel)))
-}
-func (tsf *TSF) ChannelPresetBank(channel int) int {
-	return int(C.tsf_channel_get_preset_bank(tsf.tsf, C.int(channel)))
-}
-func (tsf *TSF) ChannelPresetNumber(channel int) int {
-	return int(C.tsf_channel_get_preset_number(tsf.tsf, C.int(channel)))
-}
-func (tsf *TSF) ChannelPan(channel int) float32 {
-	return float32(C.tsf_channel_get_pan(tsf.tsf, C.int(channel)))
-}
-func (tsf *TSF) ChannelVolume(channel int) float32 {
-	return float32(C.tsf_channel_get_volume(tsf.tsf, C.int(channel)))
-}
-func (tsf *TSF) ChannelPitchWheel(channel int) float32 {
-	return float32(C.tsf_channel_get_pitchwheel(tsf.tsf, C.int(channel)))
-}
-func (tsf *TSF) ChannelPitchRange(channel int) float32 {
-	return float32(C.tsf_channel_get_pitchrange(tsf.tsf, C.int(channel)))
-}
-func (tsf *TSF) ChannelTuning(channel int) float32 {
-	return float32(C.tsf_channel_get_tuning(tsf.tsf, C.int(channel)))
+
+// Render output samples into a buffer
+// dst: target buffer of size samples * output_channels * sizeof(type)
+// samples: number of samples to render
+// mix: if 0 clear the buffer first, otherwise mix into existing data
+func (f *SoundFont) RenderFloat(dst []float32, samples, mix int) {
+	C.tsf_render_float(f.tsf, (*C.float)(&dst[0]), C.int(samples), C.int(mix))
 }

@@ -1,4 +1,4 @@
 # tsf
-TinySoundFont bindings for Go
+[TinySoundFont](https://github.com/schellingb/TinySoundFont) bindings for Go
 
-Updated to use TinySoundFont v0.9
+Updated to use v0.9

@@ -143,7 +143,7 @@ func (f *SoundFont) ActiveVoiceCount() int {
 }
 
 // Render output samples into a buffer
-// dst: target buffer of size samples * output_channels * sizeof(type)
+// dst: target buffer of size (samples * output_channels * sizeof(type))
 // samples: number of samples to render
 // mix: if 0 clear the buffer first, otherwise mix into existing data
 func (f *SoundFont) RenderShort(dst []int16, samples, mix int) {
@@ -151,7 +151,7 @@ func (f *SoundFont) RenderShort(dst []int16, samples, mix int) {
 }
 
 // Render output samples into a buffer
-// dst: target buffer of size samples * output_channels * sizeof(type)
+// dst: target buffer of size (samples * output_channels * sizeof(type))
 // samples: number of samples to render
 // mix: if 0 clear the buffer first, otherwise mix into existing data
 func (f *SoundFont) RenderFloat(dst []float32, samples, mix int) {
